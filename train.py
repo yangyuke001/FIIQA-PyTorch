@@ -17,6 +17,8 @@ from loss import AGLoss
 from datagen import ListDataset
 
 from torch.autograd import Variable
+from shufflenetv2 import shufflenetv2
+
 
 
 parser = argparse.ArgumentParser(description='PyTorch AGNet Training')
@@ -25,33 +27,36 @@ parser.add_argument('--resume', '-r', action='store_true', help='resume from che
 args = parser.parse_args()
 
 assert torch.cuda.is_available(), 'Error: CUDA not found!'
-best_correct = 0 # best number of age_correct 
+best_correct = 0 # best number of fiiqa_correct 
 start_epoch = 0  # start from epoch 0 or last epoch
 
 # Data
 print('==> Preparing data..')
 transform_train = transforms.Compose([
-    transforms.CenterCrop(150),
-    transforms.RandomCrop(150, padding=4),
-    transforms.RandomHorizontalFlip(),
+    transforms.Resize(224),
+    transforms.CenterCrop(224),
+    #transforms.RandomCrop(224, padding=4),
+    #transforms.RandomHorizontalFlip(),
     transforms.ToTensor(),
     transforms.Normalize((0.485,0.456,0.406), (0.229,0.224,0.225))
 ])
 
 transform_test = transforms.Compose([
-    transforms.CenterCrop(150),
+    transforms.Resize(224),
+    transforms.CenterCrop(224),
     transforms.ToTensor(),
     transforms.Normalize((0.485,0.456,0.406), (0.229,0.224,0.225))
 ])
 
 trainset = ListDataset(root='./data/trainingset/train-faces/', list_file='./data/trainingset/new_4people_train_standard.txt', transform=transform_train)
-trainloader = torch.utils.data.DataLoader(trainset, batch_size=32, shuffle=True, num_workers=8)
+trainloader = torch.utils.data.DataLoader(trainset, batch_size=128, shuffle=True, num_workers=8)
 
 testset = ListDataset(root='./data/validationset/val-faces/', list_file='./data/validationset/new_4people_val_standard.txt', transform=transform_test)
-testloader = torch.utils.data.DataLoader(testset, batch_size=32, shuffle=False, num_workers=4)
+testloader = torch.utils.data.DataLoader(testset, batch_size=128, shuffle=False, num_workers=4)
 
 # Model
 net = AGNet()
+#net = shufflenetv2()
 #net.load_state_dict(torch.load('./model/net.pth'))
 if args.resume:
     print('==> Resuming from checkpoint..')
@@ -60,11 +65,14 @@ if args.resume:
     best_correct = checkpoint['correct']
     start_epoch = checkpoint['epoch']
 
-net = torch.nn.DataParallel(net, device_ids=range(torch.cuda.device_count()))
+net = torch.nn.DataParallel(net, device_ids=range(torch.cuda.device_count())) #多gpu并行训练
 net.cuda()
 
 criterion = AGLoss()
-optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=0.9, weight_decay=1e-4)
+#criterion = nn.CrossEntropyLoss()
+optimizer = optim.AdaBound(net.parameters(),lr=args.lr,final_lr=0.1)
+
+#optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=0.9, weight_decay=1e-4)
 
 # Training
 def train(epoch):
@@ -72,23 +80,23 @@ def train(epoch):
     net.train()
     train_loss = 0
     total = 0
-    age_correct = 0
-    for batch_idx, (inputs, age_targets) in enumerate(trainloader):
+    fiiqa_correct = 0
+    for batch_idx, (inputs, fiiqa_targets) in enumerate(trainloader):
         inputs = Variable(inputs.cuda())
-        age_targets = Variable(age_targets.cuda().float())
+        fiiqa_targets = Variable(fiiqa_targets.cuda()) 
         optimizer.zero_grad()
-        age_preds = net(inputs)
-        loss = criterion(age_preds.float(), age_targets)
+        fiiqa_preds = net(inputs)
+        loss = criterion(fiiqa_preds.float(), fiiqa_targets)
         loss.backward()
         optimizer.step()
 
         train_loss += loss.item()
-        age_correct_i = accuracy(age_preds, age_targets)
-        age_correct += age_correct_i
+        fiiqa_correct_i = accuracy(fiiqa_preds, fiiqa_targets)
+        fiiqa_correct += fiiqa_correct_i
         total += len(inputs)
-        print('train_loss: %.3f | avg_loss: %.3f | age_prec: %.3f (%d/%d) |  [%d/%d]'  \
-            % (loss.item(), train_loss/(batch_idx+1),      \
-               200.*age_correct/total, age_correct, total,  \
+        print('train_loss: %.3f | fiiqa_prec: %.3f (%d/%d) |  [%d/%d]'  \
+            % (loss.item(),       \
+               100.*fiiqa_correct/total, fiiqa_correct, total,  \
                batch_idx+1, len(trainloader)))
 
 # Test
@@ -97,28 +105,28 @@ def test(epoch):
     net.eval()
     test_loss = 0
     total = 0
-    age_correct = 0
-    for batch_idx, (inputs, age_targets) in enumerate(testloader):
+    fiiqa_correct = 0
+    for batch_idx, (inputs, fiiqa_targets) in enumerate(testloader):
         inputs = Variable(inputs.cuda())
-        age_targets = Variable(age_targets.cuda())
+        fiiqa_targets = Variable(fiiqa_targets.cuda())
 
-        age_preds = net(inputs)
-        loss = criterion(age_preds, age_targets)
+        fiiqa_preds = net(inputs)
+        loss = criterion(fiiqa_preds, fiiqa_targets)
 
         test_loss += loss.item()
-        age_correct_i = accuracy(age_preds, age_targets)
-        age_correct += age_correct_i
+        fiiqa_correct_i = accuracy(fiiqa_preds, fiiqa_targets)
+        fiiqa_correct += fiiqa_correct_i
         total += len(inputs)
-        print('test_loss: %.3f | avg_loss: %.3f | age_prec: %.3f (%d/%d) | [%d/%d]' \
-            % (loss.item(), test_loss/(batch_idx+1),      \
-               200.*age_correct/total, age_correct, total,  \
-               batch_idx+1, len(trainloader)))
+        print('test_loss: %.3f | fiiqa_prec: %.3f (%d/%d) | [%d/%d]' \
+            % (loss.item(),       \
+               100.*fiiqa_correct/total, fiiqa_correct, total,  \
+               batch_idx+1, len(testloader)))
 
     # Save checkpoint
     global best_correct
-    if age_correct  > best_correct:
+    if fiiqa_correct  > best_correct:
         print('Saving..')
-        best_correct = age_correct 
+        best_correct = fiiqa_correct 
         state = {
             'net': net.module.state_dict(),
             'correct': best_correct,
@@ -128,16 +136,16 @@ def test(epoch):
             os.mkdir('checkpoint')
         torch.save(state, './checkpoint/ckpt.pth')
 
-def accuracy(age_preds, age_targets):
+def accuracy(fiiqa_preds, fiiqa_targets):
     '''Measure batch accuracy.'''
-    AGE_TOLERANCE = 5
-    age_prob = F.softmax(age_preds)
-    age_expect = torch.sum(Variable(torch.arange(0,200)).cuda().float()*age_prob, 1)
-    age_correct = ((age_expect-age_targets.float()).abs() < AGE_TOLERANCE).long().sum().cpu().item()
+    fiiqa_TOLERANCE = 5
+    fiiqa_prob = F.softmax(fiiqa_preds)
+    fiiqa_expect = torch.sum(Variable(torch.arange(0,200)).cuda().float()*fiiqa_prob, 1)
+    fiiqa_correct = ((fiiqa_expect-fiiqa_targets.float()).abs() < fiiqa_TOLERANCE).long().sum().cpu().item()
 
-    return age_correct
+    return fiiqa_correct
 
 
-for epoch in range(start_epoch, start_epoch+10):
+for epoch in range(start_epoch, start_epoch+100):
     train(epoch)
     test(epoch)
