@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 
 
-class AGLoss(nn.Module):
+class FIIQALoss(nn.Module):
     def __init__(self):
         super(AGLoss, self).__init__()
 
