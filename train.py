@@ -13,11 +13,11 @@ import torchvision
 import torchvision.transforms as transforms
 
 from net import AGNet
-from loss import AGLoss
+from loss import FIIQALoss
 from datagen import ListDataset
 
 from torch.autograd import Variable
-from shufflenetv2 import shufflenetv2
+from shufflenetv2 import ShuffleNetV2
 
 
 
@@ -29,34 +29,38 @@ args = parser.parse_args()
 assert torch.cuda.is_available(), 'Error: CUDA not found!'
 best_correct = 0 # best number of fiiqa_correct 
 start_epoch = 0  # start from epoch 0 or last epoch
+best_test_acc_epoch = 0
+batch_size=128
+path = './checkpoint/'
+TOLERANCE = 1
 
 # Data
 print('==> Preparing data..')
 transform_train = transforms.Compose([
-    transforms.Resize(224),
-    transforms.CenterCrop(224),
-    #transforms.RandomCrop(224, padding=4),
-    #transforms.RandomHorizontalFlip(),
+    transforms.Resize(160),
+    transforms.CenterCrop(160),
+    transforms.RandomCrop(160, padding=4),
+    transforms.RandomHorizontalFlip(),
     transforms.ToTensor(),
     transforms.Normalize((0.485,0.456,0.406), (0.229,0.224,0.225))
 ])
 
 transform_test = transforms.Compose([
-    transforms.Resize(224),
-    transforms.CenterCrop(224),
+    transforms.Resize(160),
+    transforms.CenterCrop(160),
     transforms.ToTensor(),
     transforms.Normalize((0.485,0.456,0.406), (0.229,0.224,0.225))
 ])
 
 trainset = ListDataset(root='./data/trainingset/train-faces/', list_file='./data/trainingset/new_4people_train_standard.txt', transform=transform_train)
-trainloader = torch.utils.data.DataLoader(trainset, batch_size=128, shuffle=True, num_workers=8)
+trainloader = torch.utils.data.DataLoader(trainset, batch_size, shuffle=True, num_workers=12)
 
 testset = ListDataset(root='./data/validationset/val-faces/', list_file='./data/validationset/new_4people_val_standard.txt', transform=transform_test)
-testloader = torch.utils.data.DataLoader(testset, batch_size=128, shuffle=False, num_workers=4)
+testloader = torch.utils.data.DataLoader(testset, batch_size, shuffle=False, num_workers=12)
 
 # Model
-net = AGNet()
-#net = shufflenetv2()
+#net = AGNet()
+net = ShuffleNetV2()
 #net.load_state_dict(torch.load('./model/net.pth'))
 if args.resume:
     print('==> Resuming from checkpoint..')
@@ -68,7 +72,7 @@ if args.resume:
 net = torch.nn.DataParallel(net, device_ids=range(torch.cuda.device_count())) #多gpu并行训练
 net.cuda()
 
-criterion = AGLoss()
+criterion = FIIQALoss()
 #criterion = nn.CrossEntropyLoss()
 optimizer = optim.AdaBound(net.parameters(),lr=args.lr,final_lr=0.1)
 
@@ -89,7 +93,6 @@ def train(epoch):
         loss = criterion(fiiqa_preds.float(), fiiqa_targets)
         loss.backward()
         optimizer.step()
-
         train_loss += loss.item()
         fiiqa_correct_i = accuracy(fiiqa_preds, fiiqa_targets)
         fiiqa_correct += fiiqa_correct_i
@@ -101,6 +104,9 @@ def train(epoch):
 
 # Test
 def test(epoch):
+    global Test_acc
+    global best_correct
+    global best_test_acc_epoch
     print('\nTest')
     net.eval()
     test_loss = 0
@@ -109,10 +115,8 @@ def test(epoch):
     for batch_idx, (inputs, fiiqa_targets) in enumerate(testloader):
         inputs = Variable(inputs.cuda())
         fiiqa_targets = Variable(fiiqa_targets.cuda())
-
         fiiqa_preds = net(inputs)
         loss = criterion(fiiqa_preds, fiiqa_targets)
-
         test_loss += loss.item()
         fiiqa_correct_i = accuracy(fiiqa_preds, fiiqa_targets)
         fiiqa_correct += fiiqa_correct_i
@@ -123,10 +127,13 @@ def test(epoch):
                batch_idx+1, len(testloader)))
 
     # Save checkpoint
-    global best_correct
-    if fiiqa_correct  > best_correct:
+    Test_acc = 100.*fiiqa_correct/total
+
+    if Test_acc  > best_correct:
         print('Saving..')
-        best_correct = fiiqa_correct 
+        print("best_test_acc: %0.3f" % Test_acc)
+        best_correct = Test_acc 
+        best_test_acc_epoch = epoch
         state = {
             'net': net.module.state_dict(),
             'correct': best_correct,
@@ -134,18 +141,23 @@ def test(epoch):
         }
         if not os.path.isdir('checkpoint'):
             os.mkdir('checkpoint')
-        torch.save(state, './checkpoint/ckpt.pth')
+        torch.save(state, os.path.join(path,str(best_correct)+'_'+TOLERANCE +'.pth'))
 
 def accuracy(fiiqa_preds, fiiqa_targets):
     '''Measure batch accuracy.'''
-    fiiqa_TOLERANCE = 5
-    fiiqa_prob = F.softmax(fiiqa_preds)
+
+    fiiqa_prob = F.softmax(fiiqa_preds,dim=1)
     fiiqa_expect = torch.sum(Variable(torch.arange(0,200)).cuda().float()*fiiqa_prob, 1)
-    fiiqa_correct = ((fiiqa_expect-fiiqa_targets.float()).abs() < fiiqa_TOLERANCE).long().sum().cpu().item()
+    #print('expect_num: %.3f' % fiiqa_expect.float().sum().item())
+    #print('targets_num: %.3f' % fiiqa_targets.float().sum().item())
+    fiiqa_correct = ((fiiqa_expect-fiiqa_targets.float()).abs() < TOLERANCE).long().sum().cpu().item()
 
     return fiiqa_correct
 
 
-for epoch in range(start_epoch, start_epoch+100):
+for epoch in range(start_epoch, start_epoch+50):
     train(epoch)
     test(epoch)
+
+print('best_test_acc: %0.3f' % best_correct)
+print('best_test_acc_epoch: %d' % best_test_acc_epoch)
