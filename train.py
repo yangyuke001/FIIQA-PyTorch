@@ -8,18 +8,13 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import torch.backends.cudnn as cudnn
-
 import torchvision
 import torchvision.transforms as transforms
-
 from net import AGNet
 from loss import FIIQALoss
 from datagen import ListDataset
-
 from torch.autograd import Variable
 from shufflenetv2 import ShuffleNetV2
-
-
 
 parser = argparse.ArgumentParser(description='PyTorch AGNet Training')
 parser.add_argument('--lr', default=1e-3, type=float, help='learning rate')
@@ -32,35 +27,35 @@ start_epoch = 0  # start from epoch 0 or last epoch
 best_test_acc_epoch = 0
 batch_size=128
 path = './checkpoint/'
-TOLERANCE = 1
+TOLERANCE = 2
+input_size=96
+train_epoch=200
 
 # Data
 print('==> Preparing data..')
 transform_train = transforms.Compose([
-    transforms.Resize(160),
-    transforms.CenterCrop(160),
-    transforms.RandomCrop(160, padding=4),
+    transforms.Resize(input_size),
+    transforms.CenterCrop(input_size),
+    #transforms.RandomCrop(160, padding=4),
     transforms.RandomHorizontalFlip(),
     transforms.ToTensor(),
     transforms.Normalize((0.485,0.456,0.406), (0.229,0.224,0.225))
 ])
 
 transform_test = transforms.Compose([
-    transforms.Resize(160),
-    transforms.CenterCrop(160),
+    transforms.Resize(input_size),
+    transforms.CenterCrop(input_size),
     transforms.ToTensor(),
     transforms.Normalize((0.485,0.456,0.406), (0.229,0.224,0.225))
 ])
 
 trainset = ListDataset(root='./data/trainingset/train-faces/', list_file='./data/trainingset/new_4people_train_standard.txt', transform=transform_train)
 trainloader = torch.utils.data.DataLoader(trainset, batch_size, shuffle=True, num_workers=12)
-
 testset = ListDataset(root='./data/validationset/val-faces/', list_file='./data/validationset/new_4people_val_standard.txt', transform=transform_test)
 testloader = torch.utils.data.DataLoader(testset, batch_size, shuffle=False, num_workers=12)
 
 # Model
-#net = AGNet()
-net = ShuffleNetV2()
+net = ShuffleNetV2(input_size)
 #net.load_state_dict(torch.load('./model/net.pth'))
 if args.resume:
     print('==> Resuming from checkpoint..')
@@ -68,7 +63,6 @@ if args.resume:
     net.load_state_dict(checkpoint['net'])
     best_correct = checkpoint['correct']
     start_epoch = checkpoint['epoch']
-
 net = torch.nn.DataParallel(net, device_ids=range(torch.cuda.device_count())) #多gpu并行训练
 net.cuda()
 
@@ -134,30 +128,27 @@ def test(epoch):
         print("best_test_acc: %0.3f" % Test_acc)
         best_correct = Test_acc 
         best_test_acc_epoch = epoch
+
         state = {
             'net': net.module.state_dict(),
             'correct': best_correct,
             'epoch': epoch,
         }
+
+
         if not os.path.isdir('checkpoint'):
             os.mkdir('checkpoint')
-        torch.save(state, os.path.join(path,str(best_correct)+'_'+TOLERANCE +'.pth'))
+        torch.save(state, os.path.join(path,str(best_correct)+'_'+str(input_size)+'_'+str(TOLERANCE) +'.pth'))
 
 def accuracy(fiiqa_preds, fiiqa_targets):
     '''Measure batch accuracy.'''
-
     fiiqa_prob = F.softmax(fiiqa_preds,dim=1)
     fiiqa_expect = torch.sum(Variable(torch.arange(0,200)).cuda().float()*fiiqa_prob, 1)
-    #print('expect_num: %.3f' % fiiqa_expect.float().sum().item())
-    #print('targets_num: %.3f' % fiiqa_targets.float().sum().item())
     fiiqa_correct = ((fiiqa_expect-fiiqa_targets.float()).abs() < TOLERANCE).long().sum().cpu().item()
-
     return fiiqa_correct
 
-
-for epoch in range(start_epoch, start_epoch+50):
+for epoch in range(start_epoch, start_epoch+train_epoch):
     train(epoch)
     test(epoch)
-
 print('best_test_acc: %0.3f' % best_correct)
 print('best_test_acc_epoch: %d' % best_test_acc_epoch)
