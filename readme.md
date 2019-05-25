@@ -12,6 +12,7 @@ Usage
 ------------------------------------------------------------------------------------
 1.cloning the respository
 git clone https://github.com/yangyuke001/FIIQA_pytorch
+
 cd FIIQA_pytorch
 
 2.Downloading the dataset
