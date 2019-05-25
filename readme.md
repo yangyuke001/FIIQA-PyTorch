@@ -5,7 +5,9 @@ face image illumination quality assessment  implements by pytorch
 Dependencies
 ------------------------------------------------------------------------------------
 *python 3.6+
+
 *pytorch 1.0.0+
+
 *opencv2 (optimal)
 
 Usage
