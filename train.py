@@ -6,6 +6,7 @@ import argparse
 import torch
 import torch.nn as nn
 import torch.optim as optim
+
 import torch.nn.functional as F
 import torch.backends.cudnn as cudnn
 import torchvision
@@ -14,7 +15,10 @@ from net import AGNet
 from loss import FIIQALoss
 from datagen import ListDataset
 from torch.autograd import Variable
+from adabound import AdaBound
 from shufflenetv2 import ShuffleNetV2
+from flops_counter_pytorch.ptflops import get_model_complexity_info
+from summary import model_summary
 
 parser = argparse.ArgumentParser(description='PyTorch AGNet Training')
 parser.add_argument('--lr', default=1e-3, type=float, help='learning rate')
@@ -28,8 +32,8 @@ best_test_acc_epoch = 0
 batch_size=128
 path = './checkpoint/'
 TOLERANCE = 2
-input_size=96
-train_epoch=200
+input_size=32
+train_epoch=500
 
 # Data
 print('==> Preparing data..')
@@ -56,7 +60,13 @@ testloader = torch.utils.data.DataLoader(testset, batch_size, shuffle=False, num
 
 # Model
 net = ShuffleNetV2(input_size)
-#net.load_state_dict(torch.load('./model/net.pth'))
+'''
+model_summary(net,input_size=(3,input_size,input_size))
+flops, params = get_model_complexity_info(net, (input_size, input_size), as_strings=True, print_per_layer_stat=False)
+print('Flops:  ' + flops)
+print('Params: ' + params)
+'''
+
 if args.resume:
     print('==> Resuming from checkpoint..')
     checkpoint = torch.load('./checkpoint/ckpt.pth')
