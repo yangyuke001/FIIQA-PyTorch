@@ -2,8 +2,12 @@
 face image illumination quality assessment  implements by pytorch 
 
 
-Overview:
 
+
+
+Overview:
+![image](https://github.com/yangyuke001/FIIQA_pytorch/blob/master/image/1679052023.jpg)
+![image](https://github.com/yangyuke001/FIIQA_pytorch/blob/master/image/996012808.jpg)
 
 
 Dependencies
