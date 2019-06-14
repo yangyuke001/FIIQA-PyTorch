@@ -1,6 +1,7 @@
 -----------------------------------------------------------------
 Face Image Illumination Quality Assessment  implements by pytorch
 -----------------------------------------------------------------
+This is not the official version of Illumination Quality Assessment for Face Images: A Benchmark and A Convolutional Neural Networks Based Model ，original website:https://github.com/zhanglijun95/FIIQA
 
 
 
