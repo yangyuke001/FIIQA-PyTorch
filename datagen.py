@@ -1,16 +1,12 @@
 from __future__ import print_function
-
 import io
 import os
 import sys
 import random
-
 import torch
 import torch.utils.data as data
 import torchvision.transforms as transforms
-
 from PIL import Image
-
 
 class ListDataset(data.Dataset):
     def __init__(self, root, list_file, transform):
@@ -24,7 +20,7 @@ class ListDataset(data.Dataset):
         self.transform = transform
 
         self.fname = []
-        self.age = []
+        self.fiiqa = []
 
         with io.open(list_file, encoding='gbk') as f:
             lines = f.readlines()
@@ -33,7 +29,7 @@ class ListDataset(data.Dataset):
         for line in lines:
             sp = line.strip().split()
             self.fname.append(sp[0])
-            self.age.append(int(sp[1]))
+            self.fiiqa.append(int(sp[1]))
 
     def __getitem__(self, idx):
         '''Load image.
@@ -43,15 +39,15 @@ class ListDataset(data.Dataset):
 
         Returns:
           img: (tensor) image tensor.
-          age: (float) age.
+          fiiqa: (float) fiiqa.
         '''
         # Load image and bbox locations.
         fname = self.fname[idx]
-        age = self.age[idx]
+        fiiqa = self.fiiqa[idx]
 
-        img = Image.open(os.path.join(self.root, fname))
+        img = Image.open(os.path.join(self.root, fname)).convert('RGB')
         img = self.transform(img)
-        return img, age
+        return img, fiiqa
 
     def __len__(self):
         return self.num_imgs
@@ -67,7 +63,7 @@ def test():
     ])
     dataset = ListDataset(root='./data/validationset/val-faces/', list_file='./data/validationset/val-faces/new_4people_val_standard.txt', transform=transform)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=10, shuffle=True, num_workers=1)
-    for img, age in dataloader:
+    for img, fiiqa in dataloader:
         print(img.size())
-        print(age.size())
+        print(fiiqa.size())
 
