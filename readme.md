@@ -22,9 +22,9 @@ Dependencies
 Usage
 ------------------------------------------------------------------------------------
 1.cloning the respository
-git clone https://github.com/yangyuke001/FIIQA_pytorch
+git clone https://github.com/yangyuke001/FIIQA-PyTorch
 
-cd FIIQA_pytorch
+cd FIIQA-PyTorch
 
 2.Downloading the dataset
 
