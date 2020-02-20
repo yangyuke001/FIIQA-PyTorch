@@ -21,9 +21,8 @@ class FIIQALoss(nn.Module):
         loss:
           (tensor) loss = SmoothL1Loss(fiiqa_preds, fiiqa_targets)
         '''
+        #使用分类概率和估计值相乘再求和来求期望的方法,比直接分类和直接回归的效果更好。
         fiiqa_prob = F.softmax(fiiqa_preds,dim=1)
-        #print('fiiqa_prob: %.3f ' % (fiiqa_prob))
-        fiiqa_expect = torch.sum(Variable(torch.arange(0,200)).cuda().float()*fiiqa_prob, 1) #.float()
-        fiiqa_loss = F.smooth_l1_loss(fiiqa_expect, fiiqa_targets.float())#.float()
-        #print('fiiqa_loss: %.3f ' % fiiqa_loss.data[0])
+        fiiqa_expect = torch.sum(Variable(torch.arange(0,200)).cuda().float()*fiiqa_prob, 1)
+        fiiqa_loss = F.smooth_l1_loss(fiiqa_expect, fiiqa_targets.float())
         return fiiqa_loss 
